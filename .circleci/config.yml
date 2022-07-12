@@ -29,7 +29,6 @@ jobs:
             aws ec2 describe-instances \
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --output text >> inventory
-            cat inventory
       - persist_to_workspace:
           root: ./
           paths:
@@ -49,7 +48,6 @@ jobs:
           name: "Install Ansible"
           command: |
             apk add --update ansible
-            cat inventory
       - run: 
           name: Run Playbook and Configure server
           command: ansible-playbook -i inventory main.yml
