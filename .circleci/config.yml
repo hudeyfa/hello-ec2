@@ -37,8 +37,8 @@ jobs:
       - run:
           name: "Install Ansible"
           command: |
-          apk add --update ansible
-          cat inventory
+            apk add --update ansible
+            cat inventory
       - run: 
           name: Run Playbook and Configure server
           command: ansible-playbook -i inventory main.yml
