@@ -26,6 +26,8 @@ jobs:
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --output text >> inventory
             cat inventory
+            pwd
+
 
   configure_infrastructure:
     docker:
