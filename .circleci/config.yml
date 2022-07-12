@@ -14,19 +14,23 @@ jobs:
               --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5} \
               --region us-east-1
 
-  add_hosts_to_inventory:
+  create_inventory:
     docker:
       - image: amazon/aws-cli
     steps:
       - checkout
       - run:
-          name: "Add ec2 hosts to the inventory file"
+          name: "Create inventory file and add ec2 hosts to it"
           command: |
+            echo [all] > inventory
             aws ec2 describe-instances \
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
               --output text >> inventory
             cat inventory
-            pwd
+      - persist_to_workspace:
+          root: ./
+          paths:
+            - inventory
 
 
   configure_infrastructure:
@@ -36,6 +40,8 @@ jobs:
       - checkout
       - add_ssh_keys:
           fingerprints: ["a6:57:ae:8c:9e:76:61:d4:8f:aa:71:91:c9:da:b7:c9"]
+      - attach_workspace: 
+          at: ./
       - run:
           name: "Install Ansible"
           command: |
@@ -49,8 +55,8 @@ workflows:
   my_workflow:
     jobs:
       - create_infrastructure
-      - add_hosts_to_inventory:
+      - create_inventory:
           requires: [create_infrastructure]
 
       - configure_infrastructure:
-          requires: [add_hosts_to_inventory]
+          requires: [create_inventory]
