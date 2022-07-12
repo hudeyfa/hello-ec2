@@ -24,7 +24,7 @@ jobs:
           command: |
             aws ec2 describe-instances \
               --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text >> inventory \
+              --output text >> inventory
             cat inventory
 
   configure_infrastructure:
@@ -36,7 +36,9 @@ jobs:
           fingerprints: ["a6:57:ae:8c:9e:76:61:d4:8f:aa:71:91:c9:da:b7:c9"]
       - run:
           name: "Install Ansible"
-          command: apk add --update ansible
+          command: |
+          apk add --update ansible \
+          cat inventory
       - run: 
           name: Run Playbook and Configure server
           command: ansible-playbook -i inventory main.yml
