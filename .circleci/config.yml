@@ -20,8 +20,8 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Install tar utility"
-          command: yum update -y && yum install -y tar
+          name: "Install dependencies"
+          command: yum update -y && yum install -y tar; yum install -y gzip
       - run:
           name: "Create inventory file and add ec2 hosts to it"
           command: |
