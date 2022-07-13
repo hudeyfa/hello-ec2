@@ -1,5 +1,16 @@
 version: 2.1
 
+commands:
+  destroy_environment:
+    steps:
+      - run:
+          name: Destroy environment
+          # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable 
+          # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID 
+          when: on_fail
+          command: |
+            aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5}
+
 jobs:
   create_infrastructure:
     docker:
@@ -14,50 +25,66 @@ jobs:
               --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5} \
               --region us-east-1
 
-  create_inventory:
-    docker:
-      - image: amazon/aws-cli
-    steps:
-      - checkout
-      - run:
-          name: "Install dependencies"
-          command: yum update -y && yum install -y tar; yum install -y gzip
-      - run:
-          name: "Create inventory file and add ec2 hosts to it"
-          command: |
-            echo [all] > inventory
-            aws ec2 describe-instances \
-              --query 'Reservations[*].Instances[*].PublicIpAddress' \
-              --output text >> inventory
-      - persist_to_workspace:
-          root: ./
-          paths:
-            - inventory
+  # create_inventory:
+  #   docker:
+  #     - image: amazon/aws-cli
+  #   steps:
+  #     - checkout
+  #     - run:
+  #         name: "Install dependencies"
+  #         command: yum update -y && yum install -y tar; yum install -y gzip
+  #     - run:
+  #         name: "Create inventory file and add ec2 hosts to it"
+  #         command: |
+  #           echo [all] > inventory
+  #           aws ec2 describe-instances \
+  #             --query 'Reservations[*].Instances[*].PublicIpAddress' \
+  #             --output text >> inventory
+  #     - persist_to_workspace:
+  #         root: ./
+  #         paths:
+  #           - inventory
 
 
-  configure_infrastructure:
+  # configure_infrastructure:
+  #   docker:
+  #     - image: python:3.7-alpine3.11
+  #   steps:
+  #     - checkout
+  #     - add_ssh_keys:
+  #         fingerprints: ["a6:57:ae:8c:9e:76:61:d4:8f:aa:71:91:c9:da:b7:c9"]
+  #     - attach_workspace: 
+  #         at: ./
+  #     - run:
+  #         name: "Install Ansible"
+  #         command: |
+  #           apk add --update ansible
+  #     - run: 
+  #         name: Run Playbook and Configure server
+  #         command: ansible-playbook -i inventory main.yml
+
+  smoke_test:
     docker:
-      - image: python:3.7-alpine3.11
+      - image: alpine:latest
     steps:
-      - checkout
-      - add_ssh_keys:
-          fingerprints: ["a6:57:ae:8c:9e:76:61:d4:8f:aa:71:91:c9:da:b7:c9"]
-      - attach_workspace: 
-          at: ./
-      - run:
-          name: "Install Ansible"
-          command: |
-            apk add --update ansible
       - run: 
-          name: Run Playbook and Configure server
-          command: ansible-playbook -i inventory main.yml
+          name: "Install cURL"
+          command: apk add --update curl
+      - run: 
+          name: "Smoke Test"
+          command: |
+          # Fail the job intentionally to simulate an error.
+            return 1 
+      - destroy_environment
 
 workflows:
   my_workflow:
     jobs:
       - create_infrastructure
-      - create_inventory:
-          requires: [create_infrastructure]
+      # - create_inventory:
+      #     requires: [create_infrastructure]
 
-      - configure_infrastructure:
-          requires: [create_inventory]
+      # - configure_infrastructure:
+      #     requires: [create_inventory]
+      - smoke_test:
+          requires: [create_infrastructure]
