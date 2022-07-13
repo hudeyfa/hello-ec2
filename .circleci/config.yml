@@ -73,7 +73,7 @@ jobs:
       - run: 
           name: "Smoke Test"
           command: |
-          # Fail the job intentionally to simulate an error.
+            # Fail the job intentionally to simulate an error.
             return 1 
       - destroy_environment
 
