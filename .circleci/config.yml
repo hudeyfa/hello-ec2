@@ -69,7 +69,7 @@ jobs:
     steps:
       - run: 
           name: "Install cURL"
-          command: apk add --update curl
+          command: yum update -y && yum install -y curl
       - run: 
           name: "Smoke Test"
           command: |
