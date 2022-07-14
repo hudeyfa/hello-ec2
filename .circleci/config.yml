@@ -1,29 +1,29 @@
 version: 2.1
 
-commands:
-  destroy_environment:
-    steps:
-      - run:
-          name: Destroy environment
-          # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable 
-          # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID 
-          when: on_fail
-          command: |
-            aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5}
+# commands:
+#   destroy_environment:
+#     steps:
+#       - run:
+#           name: Destroy environment
+#           # ${CIRCLE_WORKFLOW_ID} is a Built-in environment variable 
+#           # ${CIRCLE_WORKFLOW_ID:0:5} takes the first 5 chars of the variable CIRCLE_CI_WORKFLOW_ID 
+#           when: on_fail
+#           command: |
+#             aws cloudformation delete-stack --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5}
 
 jobs:
-  create_infrastructure:
-    docker:
-      - image: amazon/aws-cli
-    steps:
-      - checkout
-      - run:
-          name: "Create Cloudformation Stack"
-          command: |
-            aws cloudformation deploy \
-              --template-file template.yml \
-              --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5} \
-              --region us-east-1
+  # create_infrastructure:
+  #   docker:
+  #     - image: amazon/aws-cli
+  #   steps:
+  #     - checkout
+  #     - run:
+  #         name: "Create Cloudformation Stack"
+  #         command: |
+  #           aws cloudformation deploy \
+  #             --template-file template.yml \
+  #             --stack-name myStack-${CIRCLE_WORKFLOW_ID:0:5} \
+  #             --region us-east-1
 
   # create_inventory:
   #   docker:
@@ -63,28 +63,96 @@ jobs:
   #         name: Run Playbook and Configure server
   #         command: ansible-playbook -i inventory main.yml
 
-  smoke_test:
+  # smoke_test:
+  #   docker:
+  #     - image: amazon/aws-cli
+  #   steps:
+  #     - run: 
+  #         name: "Install cURL"
+  #         command: yum update -y && yum install -y curl
+  #     - run: 
+  #         name: "Smoke Test"
+  #         command: |
+  #           # Fail the job intentionally to simulate an error.
+  #           return 1 
+  #     - destroy_environment
+
+  create_and_deploy_front_end:
     docker:
       - image: amazon/aws-cli
     steps:
-      - run: 
-          name: "Install cURL"
-          command: yum update -y && yum install -y curl
-      - run: 
-          name: "Smoke Test"
+      - checkout
+      - run:
+          name: Execute bucket.yml - Create Cloudformation Stack
           command: |
-            # Fail the job intentionally to simulate an error.
-            return 1 
-      - destroy_environment
+            aws cloudformation deploy \
+            --template-file bucket.yml \
+            --stack-name stack-create-bucket-${CIRCLE_WORKFLOW_ID:0:7} \
+            --parameter-overrides MyBucketName="mybucket-${CIRCLE_WORKFLOW_ID:0:7}"
+      # Uncomment the step below if yoou wish to upload all contents of the current directory to the S3 bucket
+      - run: aws s3 sync index.html s3://mybucket-${CIRCLE_WORKFLOW_ID:0:7} --delete
+
+  get_last_deployment_id:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run: yum install -y tar gzip
+      - run:
+          name: Fetch and save the old pipeline ID (bucket name) responsible for the last release.
+          command: |
+            aws cloudformation \
+            list-exports --query "Exports[?Name==\`PipelineID\`].Value" \
+            --no-paginate --output text > ~/old_bucket.txt
+      - persist_to_workspace:
+          root: ~/
+          paths: 
+            - old_bucket.txt 
+
+  promote_to_production:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run:
+          name: Execute cloudfront.yml
+          command: |
+            aws cloudformation deploy \
+            --template-file cloudfront.yml \
+            --stack-name production-distro \
+            --parameter-overrides PipelineID="mybucket-${CIRCLE_WORKFLOW_ID:0:7}" 
+
+  clean_up_old_front_end:
+    docker:
+      - image: amazon/aws-cli
+    steps:
+      - checkout
+      - run: yum install -y tar gzip
+      - attach_workspace:
+          at: ~/
+      - run:
+          name: Destroy the previous production version's S3 bucket and CloudFormation stack. 
+          # Use $OldBucketID environment variable or mybucket644752792305 below.
+          # Similarly, you can create and use $OldStackID environment variable in place of production-distro 
+          command: |
+            export OldBucketID=$(cat ~/old_bucket.txt)
+            aws s3 rm "s3://${OldBucketID}" --recursive
 
 workflows:
   my_workflow:
     jobs:
-      - create_infrastructure
+      # - create_infrastructure
       # - create_inventory:
       #     requires: [create_infrastructure]
-
       # - configure_infrastructure:
       #     requires: [create_inventory]
-      - smoke_test:
-          requires: [create_infrastructure]
+      # - smoke_test:
+      #     requires: [create_infrastructure]
+      - create_and_deploy_front_end
+      - promote_to_production:
+          requires: [create_and_deploy_front_end]
+      - get_last_deployment_id
+      - clean_up_old_front_end:
+          requires: 
+            - get_last_deployment_id
+            - promote_to_production 
